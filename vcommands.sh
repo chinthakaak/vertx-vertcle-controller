@@ -9,7 +9,9 @@
 # Notes           :refer vcommands-readme.txt for more details                                                                   #
 # Bash version    :4.1.2(1)-release (x86_64-redhat-linux-gnu)                                                                    #
 ##################################################################################################################################
-propertyfile=/home/ka40215/vcommands.properties
+currentlocation=`pwd`
+
+propertyfile=$currentlocation/vcommands.properties
 
 . $propertyfile
 
@@ -25,6 +27,7 @@ declare -A modtextmap;
 #echo ${nodes[@]}
 #echo ${users[@]}
 #echo ${mods[1]}
+
 
 ############ Public functions #############
 vstart(){
@@ -74,11 +77,11 @@ vstop(){
 }
 
 vstatus(){
-	## set text format
-	__setformat
-
 	## Processing command line options
 	__getopts $@
+
+    ## set text format
+    __setformat
 
 	## Status checking running verticles
 	for node in "${nodes_arr[@]}"
@@ -131,6 +134,102 @@ vstatus(){
       done
 }
 
+vkstart(){
+	## Processing command line options
+	__getopts $@
+
+    ## stop ksar
+    #vkstop $@
+
+	#timestamp
+
+	for node in "${nodes_arr[@]}"
+	  do
+	    timestamp=`ssh ${users[$node - 1]}@${nodes[$node - 1]} date +"%Y.%m.%d.%S.%N"| awk '{print $1}'`
+	    deb $timestamp
+        ssh ${users[$node - 1]}@${nodes[$node - 1]} "\
+        rm -rf sar-${nodes[$node - 1]};\
+        LC_ALL=C sar -o sar-${nodes[$node - 1]} ${ksarinterval} >/dev/null 2>&1 &"
+      done
+#    echo
+#    LC_ALL=C sar -A -s 16:10:00 -e 05:00:00 > sar.data.txt
+#
+#    LC_ALL=C sar -f test -A  > t.txt
+#
+#    sar -o test 5 >/dev/null 2>&1 &
+#
+#    java -jar PATH_TO/kSar.jar -input "$1" -outputPDF today.pdf
+#    -input '/var/log/sa/sarXX'
+# java -jar /data/kSar-5.0.6/kSar.jar -input final2.txt -outputPDF final2.pdf
+
+}
+
+vkstop(){
+	## Processing command line options
+	__getopts $@
+
+	for node in "${nodes_arr[@]}"
+	  do
+
+        deb ${users[$node - 1]}
+        deb ${nodes[$node - 1]}
+        processId=`ssh ${users[$node - 1]}@${nodes[$node - 1]} pgrep -lf sar | grep "sar"| awk '{print $1}'`
+        ssh ${users[$node - 1]}@${nodes[$node - 1]} kill -9 $processId
+	    deb $processId
+      done
+
+	vkget $@
+	vkpdf $@
+
+}
+
+vkget(){
+	## Processing command line options
+	__getopts $@
+
+    if [ ! -d "temp" ]; then
+        mkdir temp
+    fi
+
+	for node in "${nodes_arr[@]}"
+	  do
+
+        inf ${users[$node - 1]}
+        inf ${nodes[$node - 1]}
+        scp ${users[$node - 1]}@${nodes[$node - 1]}:~/sar-${nodes[$node - 1]} temp
+
+	    inf $processId
+      done
+
+}
+
+vkpdf(){
+	## Processing command line options
+	__getopts $@
+
+	if [ ! -d "perf-test-results" ]; then
+        mkdir perf-test-results
+    fi
+
+	if [ ! -d "perf-test-results/txt" ]; then
+        mkdir perf-test-results/txt
+    fi
+
+	for node in "${nodes_arr[@]}"
+	  do
+	    ts=`timestamp`
+        LC_ALL=C sar -A -f temp/sar-${nodes[$node - 1]} > temp/sar-${nodes[$node - 1]}.txt
+        java -jar $ksarlocation/kSar.jar -input temp/sar-${nodes[$node - 1]}.txt -outputPDF perf-test-results/sar-${nodes[$node - 1]}-$ts.pdf
+        cp temp/sar-${nodes[$node - 1]}.txt perf-test-results/txt/sar-${nodes[$node - 1]}-$ts.txt
+        #rm -rf temp
+      done
+
+}
+
+vperftest(){
+    echo
+
+}
 vcstatus(){
 echo
 }
@@ -158,6 +257,12 @@ echo
 }
 
 ################Private functions#############
+
+# Define a timestamp function
+timestamp() {
+  date +"%Y-%m-%d-%S-%N"
+}
+
 __vstatus(){
 echo
 
@@ -221,11 +326,7 @@ __getmods(){
 }
 
 __getopts(){
-	b=`tput bold`
-	n=`tput sgr0`
-	NONE='\033[00m'
-	RED='\033[01;31m'
-	GREEN='\033[01;32m'
+
 	if [ $# -eq 0 ]
 	  then
         __printUsage
@@ -287,6 +388,18 @@ __getopts(){
 			done 
 		;;
 
+		-tid )shift
+			inf "Getting test id";
+			if [ $# == 0 ];
+                 then err "No test id is given as an argument ..";
+                 __printUsage
+                 #exit 0;
+                 return 3;
+            fi;
+            testid=$1;
+            shift
+		;;
+
 		* ) __printUsage
 			shift
 		    
@@ -316,9 +429,34 @@ __getvcommand(){
 	            vstop $@
 	            for a in "$@"; do shift; done
 	            ;;
+
 	    vstatus ) shift
 	            deb "${FUNCNAME} : Next command line argument is $@"
 	            vstatus $@
+	            for a in "$@"; do shift; done
+	            ;;
+
+	    vkstart ) shift
+	            deb "${FUNCNAME} : Next command line argument is $@"
+	            vkstart $@
+	            for a in "$@"; do shift; done
+	            ;;
+
+	    vkstop ) shift
+	            deb "${FUNCNAME} : Next command line argument is $@"
+	            vkstop $@
+	            for a in "$@"; do shift; done
+	            ;;
+
+	    vkget ) shift
+	            deb "${FUNCNAME} : Next command line argument is $@"
+	            vkget $@
+	            for a in "$@"; do shift; done
+	            ;;
+
+	    vkpdf ) shift
+	            deb "${FUNCNAME} : Next command line argument is $@"
+	            vkpdf $@
 	            for a in "$@"; do shift; done
 	            ;;
 
@@ -329,6 +467,14 @@ __getvcommand(){
 
 	    esac
 	done
+}
+
+__setformat(){
+    b=`tput bold`
+    n=`tput sgr0`
+    NONE='\033[00m'
+    RED='\033[01;31m'
+    GREEN='\033[01;32m'
 }
 
 __printUsage(){
@@ -355,14 +501,6 @@ __vstart(){
 	echo "Server: $2, number of instances were set to $4 ...";\
         source ~/.bash_profile;\
         nohup ./start.sh > nohup.out 2>&1 &"
-}
-
-__setformat(){
-    b=`tput bold`
-    n=`tput sgr0`
-    NONE='\033[00m'
-    RED='\033[01;31m'
-    GREEN='\033[01;32m'
 }
 ############# Logging ##############
 wrn()
@@ -416,6 +554,29 @@ ext()
 ############End Functions #########
 
 #__getvcommand $@
+
+
+#./jmeter -n -t /data/perf-arch/PerfTest.jmx -R cosmos-db2 -l test.jtl
+# jmeter -n -t script.jmx -r
+# vperftest -n 1 2 -jn 1 2 -tp yy.jmx
+# jstatd -p 4380 -J-Djava.security.policy=jstatd.all.policy
+# vertx.sh - JVM_OPTS="-Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.port=9000  -Dcom.sun.management.jmxremote.ssl=false -Dcom.sun.management.jmxremote.authenticate=false"
+
+# jstatd.all.policy policy file
+# grant codebase "file:/data/jdk1.7.0_60/lib/tools.jar" {
+#   permission java.security.AllPermission;
+#};
+#
+
+
+## app1 to app2 monitoring
+#client - jstat -gcutil -t 92189@cosmos-app2:4380 3s
+#rmi server - jstatd -p 4380 -J-Djava.security.policy=jstatd.all.policy
+
+# jps
+#  nohup jstatd -J-Djava.security.policy=jstatd.all.policy -p 1099 > /dev/null 2>&1 &
+
+# if kcathuko-mobl-vm1 as remote host not show vms, then the reason is proxy setting of visualvm. Tools>options> network> noproxy
 
 #vstart -n 1 4 -m pay ide -i 1 3
 #vstart -n 1 -m pay ide
